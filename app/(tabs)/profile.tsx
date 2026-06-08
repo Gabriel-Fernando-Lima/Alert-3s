@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useTheme } from "@/src/theme/useTheme";
 import { backupToFirestore, restoreFromFirestore, getLastBackupDate } from "@/src/services/backup";
+import { useAlarmStore } from "@/src/store/alarmStore";
 
 
 export default function ProfileScreen() {
@@ -205,6 +206,7 @@ export default function ProfileScreen() {
             try {
               setBackupLoading(true);
               const count = await restoreFromFirestore();
+              useAlarmStore.getState().load(auth.currentUser?.uid ?? "");
               if (count === 0) {
                 Alert.alert("Aviso", "Nenhum alarme novo encontrado no backup.");
               } else {
@@ -453,39 +455,39 @@ export default function ProfileScreen() {
             trackColor={{ false: colors.card, true: colors.accent }}
             thumbColor={colors.text}
           />
-          <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
-            <View style={styles.cardRowLeft}>
-              <Ionicons name="sunny-outline" size={20} color={colors.textSecondary} />
-              <View>
-                <Text style={styles.cardValue}>Brilho gradual</Text>
-                <Text style={styles.cardLabel}>Aumenta o brilho da tela aos poucos</Text>
-              </View>
-            </View>
-            <Switch
-              value={brightnessRamp}
-              onValueChange={setBrightnessRamp}
-              trackColor={{ false: colors.card, true: colors.accent }}
-              thumbColor={colors.text}
-            />
-          </View>
-
-          <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
-            <View style={styles.cardRowLeft}>
-              <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.textSecondary} />
-              <View>
-                <Text style={styles.cardValue}>Mensagem motivacional</Text>
-                <Text style={styles.cardLabel}>Exibe frase ao despertar</Text>
-              </View>
-            </View>
-            <Switch
-              value={motivationalEnabled}
-              onValueChange={setMotivationalEnabled}
-              trackColor={{ false: colors.card, true: colors.accent }}
-              thumbColor={colors.text}
-            />
-          </View>
         </View>
 
+        <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
+          <View style={styles.cardRowLeft}>
+            <Ionicons name="sunny-outline" size={20} color={colors.textSecondary} />
+            <View>
+              <Text style={styles.cardValue}>Brilho gradual</Text>
+              <Text style={styles.cardLabel}>Aumenta o brilho da tela aos poucos</Text>
+            </View>
+          </View>
+          <Switch
+            value={brightnessRamp}
+            onValueChange={setBrightnessRamp}
+            trackColor={{ false: colors.card, true: colors.accent }}
+            thumbColor={colors.text}
+          />
+        </View>
+
+        <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
+          <View style={styles.cardRowLeft}>
+            <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.textSecondary} />
+            <View>
+              <Text style={styles.cardValue}>Mensagem motivacional</Text>
+              <Text style={styles.cardLabel}>Exibe frase ao despertar</Text>
+            </View>
+          </View>
+          <Switch
+            value={motivationalEnabled}
+            onValueChange={setMotivationalEnabled}
+            trackColor={{ false: colors.card, true: colors.accent }}
+            thumbColor={colors.text}
+          />
+        </View>
 
 
         <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>

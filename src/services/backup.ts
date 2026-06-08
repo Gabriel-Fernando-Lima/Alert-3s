@@ -2,6 +2,7 @@ import { collection, doc, setDoc, getDocs } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { alarmRepository } from "../db/alarmRepository";
 import { Alarm } from "../store/alarmStore";
+import { useAlarmStore } from "../store/alarmStore";
 import { initDB } from "../db/schema";
 
 export async function backupToFirestore(): Promise<number> {
@@ -58,15 +59,17 @@ export async function restoreFromFirestore(): Promise<number> {
     const local = localMap.get(alarm.id);
 
     if (!local) {
-      // Não existe localmente — insere
       alarmRepository.insert(alarm);
       count++;
     } else if ((data.updated_at ?? 0) > local.created_at) {
-      // Firestore tem versão mais recente — substitui
       alarmRepository.update(alarm);
       count++;
     }
-    // Se local é mais recente ou igual, mantém o local
+  }
+
+  // ← força reload do store após restauração
+  if (count > 0) {
+    useAlarmStore.getState().load(uid);
   }
 
   console.log(`☁️ Restauração: ${count} alarmes sincronizados`);

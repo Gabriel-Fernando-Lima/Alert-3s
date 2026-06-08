@@ -259,14 +259,6 @@ export function RingingScreen({ alarm }: Props) {
         <AppText size="md" bold style={{ color: colors.text }}>Parar</AppText>
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={[styles.stopBtn, { backgroundColor: colors.danger }]}
-        onPress={() => challengeEnabled ? generateChallenge() : handleStop("touch")}
-        accessibilityLabel="Parar alarme"
-      >
-        <Ionicons name="stop-circle" size={28} color={colors.text} />
-        <AppText size="md" bold style={{ color: colors.text }}>Parar</AppText>
-      </TouchableOpacity>
 
       {showChallenge && (
         <View style={styles.challengeOverlay}>
