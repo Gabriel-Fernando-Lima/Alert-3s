@@ -14,6 +14,7 @@ import { scheduleAlarm, requestNotificationPermission } from "@/src/services/not
 import { useAlarmAudio } from "@/src/services/audio";
 import { auth } from "@/src/services/firebase";
 import { useTheme } from "@/src/theme/useTheme";
+import { ALARM_SOUNDS } from "@/src/services/audio";
 
 const DAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const SOUNDS = ["default", "beep", "digital", "nature"];
@@ -24,7 +25,6 @@ export default function CreateAlarmScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEditing = !!id;
   const { add, update, alarms } = useAlarmStore();
-  const { playPreview } = useAlarmAudio();
   const uid = auth.currentUser?.uid ?? "";
 
   const [time, setTime] = useState(new Date());
@@ -35,9 +35,18 @@ export default function CreateAlarmScreen() {
 
   const { setRinging } = useAlarmStore();
   const { gradualVolume } = useSettingsStore();
-  const { startRinging, stopRinging } = useAlarmRinging();
+  const { startRinging, stopRinging } = useAlarmRinging(selectedSound);
   const [testingAlarm, setTestingAlarm] = useState(false);
   const { colors, fonts } = useTheme();
+
+  const SOUND_ICONS: Record<string, string> = {
+    default: "alarm-outline",
+    beep: "radio-outline",
+    digital: "pulse-outline",
+    nature: "leaf-outline",
+  };
+
+  const { playPreview } = useAlarmAudio(selectedSound);
 
   useEffect(() => {
     if (isEditing) {
@@ -175,10 +184,20 @@ export default function CreateAlarmScreen() {
         {SOUNDS.map((s) => (
           <TouchableOpacity
             key={s}
-            style={[styles.soundBtn, selectedSound === s && styles.soundBtnActive]}
+            style={[
+              styles.soundBtn,
+              { backgroundColor: colors.card, borderColor: colors.border },
+              selectedSound === s && { backgroundColor: colors.accent, borderColor: colors.accent },
+            ]}
             onPress={() => setSelectedSound(s)}
+            accessibilityLabel={`Som ${s}`}
           >
-            <Text style={[styles.soundBtnText, selectedSound === s && styles.soundBtnTextActive]}>
+            <Ionicons
+              name={SOUND_ICONS[s] as any}
+              size={16}
+              color={selectedSound === s ? colors.text : colors.textSecondary}
+            />
+            <Text style={[styles.soundBtnText, { color: colors.textSecondary }, selectedSound === s && { color: colors.text }]}>
               {s}
             </Text>
           </TouchableOpacity>

@@ -37,6 +37,15 @@ type SettingsStore = {
   resetVoiceStats: () => void;
   challengeEnabled: boolean;
   setChallengeEnabled: (enabled: boolean) => Promise<void>;
+  brightnessRamp: boolean;
+  motivationalEnabled: boolean;
+  setBrightnessRamp: (enabled: boolean) => Promise<void>;
+  setMotivationalEnabled: (enabled: boolean) => Promise<void>;
+  tutorialSeen: boolean;
+  vibrationPattern: "default" | "long" | "short" | "none";
+  setTutorialSeen: (seen: boolean) => Promise<void>;
+  setVibrationPattern: (pattern: "default" | "long" | "short" | "none") => Promise<void>;
+
 };
 
 const DEFAULT_COMMANDS: VoiceCommandSet = {
@@ -60,6 +69,10 @@ async function saveSettings(state: any) {
       voiceLanguage: state.voiceLanguage,
       voiceStats: state.voiceStats,
       challengeEnabled: state.challengeEnabled,
+      brightnessRamp: state.brightnessRamp,
+      motivationalEnabled: state.motivationalEnabled,
+      tutorialSeen: state.tutorialSeen,
+      vibrationPattern: state.vibrationPattern,
     };
     console.log("[settingsStore.saveSettings] saving:", payload);
     await AsyncStorage.setItem("@alert:settings", JSON.stringify(payload));
@@ -82,6 +95,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   voiceLanguage: "pt-BR",
   voiceStats: { recognized: 0, failed: 0 },
   challengeEnabled: false,
+  brightnessRamp: true,
+  motivationalEnabled: true,
+  tutorialSeen: false,
+  vibrationPattern: "default",
 
   load: async () => {
     try {
@@ -168,7 +185,22 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     set({ challengeEnabled: enabled });
     await saveSettings({ ...get(), challengeEnabled: enabled });
   },
-
+  setBrightnessRamp: async (enabled) => {
+    set({ brightnessRamp: enabled });
+    await saveSettings({ ...get(), brightnessRamp: enabled });
+  },
+  setMotivationalEnabled: async (enabled) => {
+    set({ motivationalEnabled: enabled });
+    await saveSettings({ ...get(), motivationalEnabled: enabled });
+  },
+  setTutorialSeen: async (seen) => {
+    set({ tutorialSeen: seen });
+    await saveSettings({ ...get(), tutorialSeen: seen });
+  },
+  setVibrationPattern: async (pattern) => {
+    set({ vibrationPattern: pattern });
+    await saveSettings({ ...get(), vibrationPattern: pattern });
+  },
   incrementSnooze: () => {
     const next = get().snoozeCount + 1;
     set({ snoozeCount: next });

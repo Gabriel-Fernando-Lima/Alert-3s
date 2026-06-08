@@ -21,6 +21,8 @@ export function useVoiceCommand(options: UseVoiceCommandOptions = {}) {
   const [error, setError] = useState<string | null>(null);
   const stoppedRef = useRef(false);
   const { voiceLanguage, voiceCommands, incrementVoiceStat } = useSettingsStore.getState();
+  
+
 
   const startListening = useCallback(async () => {
     try {
@@ -168,5 +170,6 @@ export function useVoiceCommand(options: UseVoiceCommandOptions = {}) {
     setListening(false);
   }, []);
 
+  
   return { listening, transcript, error, startListening, stopListening };
 }

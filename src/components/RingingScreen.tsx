@@ -20,7 +20,8 @@ type Props = { alarm: Alarm };
 export function RingingScreen({ alarm }: Props) {
   const setRinging = useAlarmStore((s) => s.setRinging);
   const { startRinging, stopRinging } = useAlarmRinging();
-  const { snoozeMinutes, flashEnabled, gradualVolume, autoVoice, shakeEnabled, challengeEnabled } = useSettingsStore();
+  const { snoozeMinutes, flashEnabled, gradualVolume, autoVoice, shakeEnabled,
+    challengeEnabled, brightnessRamp, motivationalEnabled, vibrationPattern } = useSettingsStore();
   const flashRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shakeRef = useRef<{ x: number; y: number; z: number } | null>(null);
   const stoppedRef = useRef(false);
@@ -56,9 +57,20 @@ export function RingingScreen({ alarm }: Props) {
     stoppedRef.current = false;
     firedAtRef.current = Date.now();
     startRinging(gradualVolume);
-    Vibration.vibrate([300, 200, 300, 200], true);
+    const VIBRATION_PATTERNS: Record<string, number[]> = {
+      default: [300, 200, 300, 200],
+      long: [1000, 300, 1000, 300],
+      short: [100, 400, 100, 400],
+      none: [],
+    };
+
+    const pattern = VIBRATION_PATTERNS[vibrationPattern];
+    if (pattern.length > 0) {
+      Vibration.vibrate(pattern, true);
+    }
+
     startShakeDetection();
-    startBrightnessRamp();
+    if (brightnessRamp) startBrightnessRamp();
     if (flashEnabled) startFlash();
     if (autoVoice) {
       setTimeout(() => {
@@ -112,10 +124,11 @@ export function RingingScreen({ alarm }: Props) {
   }
 
   function startShakeDetection() {
-    if (!shakeEnabled) return; // ← adiciona essa linha
+    if (!shakeEnabled) return;
     Accelerometer.setUpdateInterval(200);
     Accelerometer.addListener((data) => {
       if (stoppedRef.current) return;
+      if (challengeEnabled) return; // ← bloqueia shake quando desafio ativo
       if (shakeRef.current) {
         const delta =
           Math.abs(data.x - shakeRef.current.x) +
@@ -211,9 +224,11 @@ export function RingingScreen({ alarm }: Props) {
       <Ionicons name="alarm" size={80} color={colors.accent} />
       <AppText size="huge" bold style={{ letterSpacing: 4 }}>{formatTime(alarm.hour, alarm.minute)}</AppText>
       {alarm.label ? <AppText size="xl" color="textSecondary">{alarm.label}</AppText> : null}
-      <AppText size="sm" color="textSecondary" style={{ textAlign: "center", paddingHorizontal: 32, fontStyle: "italic" }}>
-        {motivational.current}
-      </AppText>
+      {motivationalEnabled && (
+        <AppText size="sm" color="textSecondary" style={{ textAlign: "center", paddingHorizontal: 32, fontStyle: "italic" }}>
+          {motivational.current}
+        </AppText>
+      )}
       <AppText size="sm" color="textSecondary" style={{ marginTop: 8 }}>Agite o celular ou diga "parar"</AppText>
 
       <TouchableOpacity style={[styles.micBtn, { borderColor: colors.accent }]} onPress={startListening} accessibilityLabel="Parar por voz">
@@ -221,27 +236,28 @@ export function RingingScreen({ alarm }: Props) {
         <AppText size="sm" style={{ color: colors.accent }}>Comando de voz</AppText>
       </TouchableOpacity>
 
+      {/* Remove o botão de parar de dentro de styles.buttons */}
       <View style={styles.buttons}>
         <TouchableOpacity
-          style={[styles.snoozeBtn, { backgroundColor: colors.card }]}
-          onPress={() => handleSnooze("touch")}
+          style={[styles.snoozeBtn, { backgroundColor: colors.card, opacity: challengeEnabled ? 0.4 : 1 }]}
+          onPress={() => !challengeEnabled && handleSnooze("touch")}
+          disabled={challengeEnabled}
           accessibilityLabel="Soneca"
-          accessibilityRole="button"
         >
           <Ionicons name="time-outline" size={24} color={colors.text} />
           <AppText size="md" style={{ color: colors.text }}>Soneca ({snoozeMinutes} min)</AppText>
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.stopBtn, { backgroundColor: colors.danger }]}
-          onPress={() => handleStop("touch")}
-          accessibilityLabel="Parar alarme"
-          accessibilityRole="button"
-        >
-          <Ionicons name="stop-circle" size={28} color={colors.text} />
-          <AppText size="md" bold style={{ color: colors.text }}>Parar</AppText>
-        </TouchableOpacity>
       </View>
+
+      {/* Botão único de parar */}
+      <TouchableOpacity
+        style={[styles.stopBtn, { backgroundColor: colors.danger, marginHorizontal: 32, width: "80%" }]}
+        onPress={() => challengeEnabled ? generateChallenge() : handleStop("touch")}
+        accessibilityLabel="Parar alarme"
+      >
+        <Ionicons name="stop-circle" size={28} color={colors.text} />
+        <AppText size="md" bold style={{ color: colors.text }}>Parar</AppText>
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={[styles.stopBtn, { backgroundColor: colors.danger }]}

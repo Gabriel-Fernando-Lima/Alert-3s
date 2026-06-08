@@ -39,7 +39,7 @@ export default function ProfileScreen() {
     shakeEnabled, challengeEnabled,
     load, setVoiceCommands, setSnoozeMinutes, setFlashEnabled, setGradualVolume, setAutoVoice,
     setShakeEnabled, setChallengeEnabled, voiceLanguage, voiceStats,
-    setVoiceLanguage, resetVoiceStats,
+    setVoiceLanguage, resetVoiceStats, motivationalEnabled, brightnessRamp, setBrightnessRamp, setMotivationalEnabled, vibrationPattern, setVibrationPattern,
   } = useSettingsStore();
 
   const LANGUAGES = [
@@ -404,6 +404,43 @@ export default function ProfileScreen() {
 
         <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
           <View style={styles.cardRowLeft}>
+            <Ionicons name="phone-portrait-outline" size={20} color={colors.textSecondary} />
+            <View>
+              <Text style={styles.cardValue}>Padrão de vibração</Text>
+              <Text style={styles.cardLabel}>Como o celular vibra no alarme</Text>
+            </View>
+          </View>
+        </View>
+        <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap", paddingBottom: 8 }}>
+          {([
+            { value: "default", label: "Padrão", icon: "radio-button-on-outline" },
+            { value: "long", label: "Longa", icon: "remove-outline" },
+            { value: "short", label: "Curta", icon: "ellipsis-horizontal-outline" },
+            { value: "none", label: "Sem vibração", icon: "volume-mute-outline" },
+          ] as const).map((opt) => (
+            <TouchableOpacity
+              key={opt.value}
+              onPress={() => setVibrationPattern(opt.value)}
+              style={[
+                styles.toggleBtn,
+                { flexDirection: "row", gap: 6, alignItems: "center" },
+                vibrationPattern === opt.value
+                  ? { backgroundColor: colors.accent }
+                  : { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+              ]}
+            >
+              <Ionicons name={opt.icon as any} size={14}
+                color={vibrationPattern === opt.value ? "#fff" : colors.textSecondary} />
+              <Text style={[styles.toggleBtnText,
+              vibrationPattern !== opt.value && { color: colors.textSecondary }]}>
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
+          <View style={styles.cardRowLeft}>
             <Ionicons name="checkmark-circle-outline" size={20} color={colors.textSecondary} />
             <View>
               <Text style={styles.cardValue}>Desafio para desligar</Text>
@@ -416,7 +453,40 @@ export default function ProfileScreen() {
             trackColor={{ false: colors.card, true: colors.accent }}
             thumbColor={colors.text}
           />
+          <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
+            <View style={styles.cardRowLeft}>
+              <Ionicons name="sunny-outline" size={20} color={colors.textSecondary} />
+              <View>
+                <Text style={styles.cardValue}>Brilho gradual</Text>
+                <Text style={styles.cardLabel}>Aumenta o brilho da tela aos poucos</Text>
+              </View>
+            </View>
+            <Switch
+              value={brightnessRamp}
+              onValueChange={setBrightnessRamp}
+              trackColor={{ false: colors.card, true: colors.accent }}
+              thumbColor={colors.text}
+            />
+          </View>
+
+          <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
+            <View style={styles.cardRowLeft}>
+              <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.textSecondary} />
+              <View>
+                <Text style={styles.cardValue}>Mensagem motivacional</Text>
+                <Text style={styles.cardLabel}>Exibe frase ao despertar</Text>
+              </View>
+            </View>
+            <Switch
+              value={motivationalEnabled}
+              onValueChange={setMotivationalEnabled}
+              trackColor={{ false: colors.card, true: colors.accent }}
+              thumbColor={colors.text}
+            />
+          </View>
         </View>
+
+
 
         <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
           <View style={styles.cardRowLeft}>
