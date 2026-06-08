@@ -1,17 +1,18 @@
 import { useEffect, useState } from "react";
 import {
   View, FlatList, TouchableOpacity,
-  Switch, StyleSheet, Alert, Animated, Text,
+  Switch, StyleSheet, Alert, Text,
 } from "react-native";
 import { AppText } from "../../../src/components/AppText";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAlarmStore, Alarm } from "@/src/store/alarmStore";
 import { initDB } from "@/src/db/schema";
-import { scheduleAlarm, cancelAlarm } from "@/src/services/notifications";
+import { scheduleAlarm, cancelAlarm, scheduleSnooze } from "@/src/services/notifications";
 import { auth } from "@/src/services/firebase";
 import { useVoiceCommand } from "@/src/hooks/useVoiceCommand";
 import { useTheme } from "@/src/theme/useTheme";
+import * as Notifications from "expo-notifications";
 
 const DAYS = ["D", "S", "T", "Q", "Q", "S", "S"];
 
@@ -19,8 +20,16 @@ export default function AlarmsScreen() {
   const { alarms, load, remove, toggle, add } = useAlarmStore();
   const uid = auth.currentUser?.uid ?? "";
   const [voiceStatus, setVoiceStatus] = useState("");
+  const { colors, fonts, highContrast } = useTheme();
 
-  const { listening, transcript, startListening, stopListening } = useVoiceCommand({
+  function showStatus(msg: string) {
+    setVoiceStatus(msg);
+    setTimeout(() => setVoiceStatus(""), 3000);
+  }
+
+  const { listening, startListening, stopListening } = useVoiceCommand({
+    prompt: "Diga o horário do alarme...",
+
     onCreateAlarm: async (hour, minute, days, label) => {
       const alarm: Alarm = {
         id: Date.now().toString(),
@@ -35,17 +44,60 @@ export default function AlarmsScreen() {
       };
       add(alarm);
       await scheduleAlarm(alarm);
-      setVoiceStatus(`✅ Alarme criado para ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
-      setTimeout(() => setVoiceStatus(""), 3000);
+      showStatus(`✅ Alarme criado para ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
+    },
+
+    onNap: async (minutes) => {
+      const napDate = new Date(Date.now() + minutes * 60 * 1000);
+      const napHour = napDate.getHours();
+      const napMinute = napDate.getMinutes();
+
+      const napAlarm: Alarm = {
+        id: `nap_${Date.now()}`,
+        uid,
+        label: `Cochilo de ${minutes} min`,
+        hour: napHour,
+        minute: napMinute,
+        days: [],
+        sound: "default",
+        active: true,
+        created_at: Date.now(),
+      };
+
+      add(napAlarm);
+      await scheduleAlarm(napAlarm);
+      showStatus(`😴 Cochilo de ${minutes} min agendado para ${String(napHour).padStart(2, "0")}:${String(napMinute).padStart(2, "0")}`);
+    },
+
+    onReminder: async (hour, minute, label) => {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `reminder_${Date.now()}`,
+        content: {
+          title: "🔔 Lembrete",
+          body: label,
+          sound: "alarm_default.mp3",
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: nextOccurrence(hour, minute),
+        },
+      });
+      showStatus(`🔔 Lembrete "${label}" criado para ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
     },
   });
-
-  const { colors, fonts, highContrast } = useTheme();
 
   useEffect(() => {
     initDB();
     load(uid);
   }, []);
+
+  function nextOccurrence(hour: number, minute: number): Date {
+    const now = new Date();
+    const next = new Date();
+    next.setHours(hour, minute, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    return next;
+  }
 
   function handleToggle(alarm: Alarm) {
     const next = !alarm.active;
@@ -77,31 +129,25 @@ export default function AlarmsScreen() {
   }
 
   function handleVoiceBtn() {
-    if (listening) {
-      stopListening();
-    } else {
-      setVoiceStatus("🎤 Ouvindo...");
-      startListening();
-    }
+    if (listening) stopListening();
+    else startListening();
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <AppText size="xxl" bold style={{ marginBottom: 24 }}>Meus Alarmes</AppText>
 
-      {/* Status de voz */}
       {voiceStatus ? (
         <View style={[styles.voiceStatus, { backgroundColor: colors.card, borderColor: colors.accent }]}>
           <Text style={[styles.voiceStatusText, { color: colors.accent }]}>{voiceStatus}</Text>
         </View>
       ) : null}
 
-
       {alarms.length === 0 ? (
-          <View style={styles.empty}>
+        <View style={styles.empty}>
           <Ionicons name="alarm-outline" size={64} color={colors.textSecondary} />
-          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Nenhum alarme criado</Text>
-          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Toque no + ou no mic para adicionar</Text>
+          <AppText color="textSecondary" size="lg" style={{ fontWeight: "600" }}>Nenhum alarme criado</AppText>
+          <AppText color="textSecondary" size="sm">Toque no + ou no mic para adicionar</AppText>
         </View>
       ) : (
         <FlatList
@@ -109,13 +155,15 @@ export default function AlarmsScreen() {
           keyExtractor={(a) => a.id}
           contentContainerStyle={{ gap: 12, paddingBottom: 100 }}
           renderItem={({ item }) => (
-              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }, !item.active && styles.cardInactive]}>
+            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }, !item.active && styles.cardInactive]}>
               <TouchableOpacity
                 style={styles.cardLeft}
                 onPress={() => router.push({ pathname: "/(tabs)/alarms/create" as any, params: { id: item.id } })}
                 accessibilityLabel={`Editar alarme ${formatTime(item.hour, item.minute)}`}
               >
-                <AppText size="xxl" bold color={item.active ? "text" : "textSecondary"}>{formatTime(item.hour, item.minute)}</AppText>
+                <AppText size="xxl" bold color={item.active ? "text" : "textSecondary"}>
+                  {formatTime(item.hour, item.minute)}
+                </AppText>
                 {item.label ? <AppText size="sm" color="textSecondary">{item.label}</AppText> : null}
                 <View style={styles.days}>
                   {DAYS.map((d, i) => (
@@ -142,21 +190,14 @@ export default function AlarmsScreen() {
         />
       )}
 
-      {/* FAB de voz */}
       <TouchableOpacity
-        style={[styles.fabVoice, { backgroundColor: colors.accent }, listening && { backgroundColor: colors.danger }]}
+        style={[styles.fabVoice, { backgroundColor: listening ? colors.danger : colors.card }]}
         onPress={handleVoiceBtn}
-        accessibilityLabel={listening ? "Parar gravação de voz" : "Criar alarme por voz"}
-        accessibilityRole="button"
+        accessibilityLabel={listening ? "Parar gravação" : "Comando de voz"}
       >
-        <Ionicons
-          name={listening ? "stop" : "mic-outline"}
-          size={28}
-          color={highContrast ? colors.background : colors.text}
-        />
+        <Ionicons name={listening ? "stop" : "mic-outline"} size={28} color={colors.text} />
       </TouchableOpacity>
 
-      {/* FAB de adicionar */}
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.accent }]}
         onPress={() => router.push("/(tabs)/alarms/create" as any)}
@@ -169,72 +210,17 @@ export default function AlarmsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0a0a0a", paddingHorizontal: 20, paddingTop: 60 },
-  header: { fontSize: 28, fontWeight: "bold", color: "#fff", marginBottom: 24 },
+  container: { flex: 1, paddingHorizontal: 20, paddingTop: 60 },
   empty: { flex: 1, justifyContent: "center", alignItems: "center", gap: 8 },
-  emptyText: { color: "#555", fontSize: 18, fontWeight: "600" },
-  emptySubtext: { color: "#444", fontSize: 14 },
-  card: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-  },
+  card: { borderRadius: 16, padding: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderWidth: 1 },
   cardInactive: { opacity: 0.5 },
   cardLeft: { gap: 4, flex: 1 },
   cardRight: { alignItems: "center", gap: 12 },
-  time: { fontSize: 36, fontWeight: "bold", color: "#fff" },
-  textInactive: { color: "#666" },
-  label: { fontSize: 13, color: "#888" },
   days: { flexDirection: "row", gap: 6, marginTop: 4 },
-  day: { fontSize: 12, color: "#444", fontWeight: "600" },
-  dayActive: { color: "#6C63FF" },
+  day: { fontSize: 12, fontWeight: "600" },
   deleteBtn: { padding: 4 },
-  voiceStatus: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#6C63FF",
-  },
-  voiceStatusText: { color: "#6C63FF", fontSize: 14, textAlign: "center" },
-  transcriptBox: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-  },
-  transcriptText: { color: "#888", fontSize: 13, textAlign: "center", fontStyle: "italic" },
-  fab: {
-    position: "absolute",
-    bottom: 32,
-    right: 24,
-    backgroundColor: "#6C63FF",
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 8,
-  },
-  fabVoice: {
-    position: "absolute",
-    bottom: 32,
-    right: 100,
-    backgroundColor: "#333",
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 8,
-  },
-  fabVoiceActive: {
-    backgroundColor: "#ff4444",
-  },
+  voiceStatus: { borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1 },
+  voiceStatusText: { fontSize: 14, textAlign: "center" },
+  fab: { position: "absolute", bottom: 32, right: 24, width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center", elevation: 8 },
+  fabVoice: { position: "absolute", bottom: 32, right: 100, width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center", elevation: 8 },
 });

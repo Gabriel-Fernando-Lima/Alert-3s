@@ -12,6 +12,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useSettingsStore } from "@/src/store/settingsStore";
 import { useTheme } from "@/src/theme/useTheme";
+import { backupToFirestore, restoreFromFirestore, getLastBackupDate } from "@/src/services/backup";
+
 
 export default function ProfileScreen() {
   const [loading, setLoading] = useState(false);
@@ -29,6 +31,9 @@ export default function ProfileScreen() {
 
   const { colors, fonts } = useTheme();
 
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [lastBackup, setLastBackup] = useState<number | null>(null);
+
   const {
     voiceCommands, snoozeMinutes, flashEnabled, gradualVolume, autoVoice,
     load, setVoiceCommands, setSnoozeMinutes, setFlashEnabled, setGradualVolume, setAutoVoice,
@@ -44,8 +49,14 @@ export default function ProfileScreen() {
     useCallback(() => {
       loadBiometricStatus();
       load();
+      loadLastBackup();
     }, [])
   );
+
+  async function loadLastBackup() {
+    const date = await getLastBackupDate();
+    setLastBackup(date);
+  }
 
   useEffect(() => {
     setCmdStopList(voiceCommands.stop);
@@ -153,6 +164,53 @@ export default function ProfileScreen() {
         },
       },
     ]);
+  }
+
+  async function handleBackup() {
+    try {
+      setBackupLoading(true);
+      const count = await backupToFirestore();
+      const date = await getLastBackupDate();
+      setLastBackup(date);
+      Alert.alert("✅ Backup concluído", `${count} alarme(s) salvos na nuvem.`);
+    } catch (e: any) {
+      Alert.alert("Erro", e.message ?? "Não foi possível fazer o backup.");
+    } finally {
+      setBackupLoading(false);
+    }
+  }
+
+  async function handleRestore() {
+    Alert.alert(
+      "Restaurar alarmes",
+      "Isso vai importar os alarmes do backup para este dispositivo. Continuar?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Restaurar",
+          onPress: async () => {
+            try {
+              setBackupLoading(true);
+              const count = await restoreFromFirestore();
+              if (count === 0) {
+                Alert.alert("Aviso", "Nenhum alarme novo encontrado no backup.");
+              } else {
+                Alert.alert("✅ Restauração concluída", `${count} alarme(s) importados.`);
+              }
+            } catch (e: any) {
+              Alert.alert("Erro", e.message ?? "Não foi possível restaurar.");
+            } finally {
+              setBackupLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  function formatBackupDate(ts: number) {
+    const d = new Date(ts);
+    return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getFullYear()} ${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
   }
 
   return (
@@ -421,6 +479,44 @@ export default function ProfileScreen() {
             trackColor={{ false: colors.card, true: colors.accent }}
             thumbColor={colors.text}
           />
+        </View>
+      </View>
+
+      {/* Backup */}
+      <Text style={styles.sectionTitle}>Backup</Text>
+      <View style={[styles.card, { flexDirection: "column", gap: 12 }]}>
+        <View style={styles.cardRowLeft}>
+          <Ionicons name="cloud-outline" size={24} color="#888" />
+          <View>
+            <Text style={styles.cardValue}>Backup na nuvem</Text>
+            <Text style={styles.cardLabel}>
+              {lastBackup ? `Último backup: ${formatBackupDate(lastBackup)}` : "Nenhum backup realizado"}
+            </Text>
+          </View>
+        </View>
+
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <TouchableOpacity
+            style={[styles.toggleBtn, { flex: 1, alignItems: "center" }]}
+            onPress={handleBackup}
+            disabled={backupLoading}
+            accessibilityLabel="Fazer backup"
+          >
+            {backupLoading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.toggleBtnText}>Fazer backup</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.toggleBtn, { flex: 1, alignItems: "center", backgroundColor: "#333" }]}
+            onPress={handleRestore}
+            disabled={backupLoading}
+            accessibilityLabel="Restaurar backup"
+          >
+            <Text style={styles.toggleBtnText}>Restaurar</Text>
+          </TouchableOpacity>
         </View>
       </View>
 

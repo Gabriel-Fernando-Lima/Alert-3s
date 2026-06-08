@@ -5,6 +5,12 @@ type ParsedAlarm = {
   label: string;
 } | null;
 
+type ParsedReminder = {
+  hour: number;
+  minute: number;
+  label: string;
+} | null;
+
 const DAY_MAP: Record<string, number> = {
   domingo: 0, dom: 0,
   segunda: 1, "segunda-feira": 1, seg: 1,
@@ -20,22 +26,36 @@ const COMMAND_PATTERNS = {
   snooze: ["soneca", "mais cinco", "adiar", "cinco minutos"],
   create: ["criar alarme", "novo alarme", "acorda", "acordar", "me acorda", "colocar alarme"],
   nap: ["cochilo", "tirar um cochilo", "descansar"],
+  reminder: ["lembre-me", "lembrete", "me lembra", "não esquecer", "me avisa"],
 };
 
 export function parseVoiceCommand(text: string): {
-  type: "create" | "stop" | "snooze" | "nap" | "unknown";
+  type: "create" | "stop" | "snooze" | "nap" | "reminder" | "unknown";
   alarm?: ParsedAlarm;
   napMinutes?: number;
+  reminder?: ParsedReminder;
 } {
   const lower = text.toLowerCase().trim();
 
-  // Cochilo rápido — verifica primeiro pois é mais específico
+  // Cochilo rápido
   const napMatch = lower.match(/cochilo\s+(?:de\s+)?(\d+)\s*(?:minutos?|min)/);
   if (napMatch) {
     return { type: "nap", napMinutes: parseInt(napMatch[1]) };
   }
 
-  // Criação de alarme — verifica ANTES de stop para evitar conflito com "para"
+  // Cochilo sem número — padrão de 20 min
+  if (COMMAND_PATTERNS.nap.some((p) => lower.includes(p)) && !lower.includes("alarme")) {
+    const minMatch = lower.match(/(\d+)\s*(?:minutos?|min)/);
+    return { type: "nap", napMinutes: minMatch ? parseInt(minMatch[1]) : 20 };
+  }
+
+  // Lembrete — verifica antes de create
+  if (COMMAND_PATTERNS.reminder.some((p) => lower.includes(p))) {
+    const reminder = extractReminderFromText(lower);
+    return { type: "reminder", reminder };
+  }
+
+  // Criação de alarme
   if (COMMAND_PATTERNS.create.some((p) => lower.includes(p))) {
     const alarm = extractAlarmFromText(lower);
     return { type: "create", alarm };
@@ -45,12 +65,12 @@ export function parseVoiceCommand(text: string): {
   const alarm = extractAlarmFromText(lower);
   if (alarm) return { type: "create", alarm };
 
-  // Comandos de soneca
+  // Soneca
   if (COMMAND_PATTERNS.snooze.some((p) => lower.includes(p))) {
     return { type: "snooze" };
   }
 
-  // Comandos de parar — verifica por último
+  // Parar
   if (COMMAND_PATTERNS.stop.some((p) => lower.includes(p))) {
     return { type: "stop" };
   }
@@ -58,18 +78,46 @@ export function parseVoiceCommand(text: string): {
   return { type: "unknown" };
 }
 
+function extractReminderFromText(text: string): ParsedReminder {
+  // Extrai horário
+  const timeData = extractAlarmFromText(text);
+  if (!timeData) return null;
+
+  // Extrai label: tudo entre "lembre-me de/para" e "às/as/para as"
+  let label = "";
+  const labelMatch = text.match(
+    /(?:lembre-me|me lembra|me avisa|lembrete)\s+(?:de|para|que|do|da)?\s*(.+?)\s+(?:às|as|para as|às|a partir)/
+  );
+  if (labelMatch) {
+    label = labelMatch[1].trim();
+  } else {
+    // Fallback: tudo após o trigger e antes do horário
+    const triggerMatch = text.match(
+      /(?:lembre-me|me lembra|me avisa|lembrete)\s+(?:de|para|que|do|da)?\s*(.+)/
+    );
+    if (triggerMatch) {
+      // Remove o horário do final
+      label = triggerMatch[1]
+        .replace(/\d{1,2}:\d{2}/, "")
+        .replace(/\d{1,2}\s*hora[s]?/, "")
+        .replace(/às|as|para as/, "")
+        .trim();
+    }
+  }
+
+  return { hour: timeData.hour, minute: timeData.minute, label: label || "Lembrete" };
+}
+
 function extractAlarmFromText(text: string): ParsedAlarm {
   let hour = -1;
   let minute = 0;
 
-  // Padrão "HH:MM" ou "HH horas MM" 
   const digitalMatch = text.match(/(\d{1,2}):(\d{2})/);
   if (digitalMatch) {
     hour = parseInt(digitalMatch[1]);
     minute = parseInt(digitalMatch[2]);
   }
 
-  // Padrão "X horas e meia / e quinze / e quarenta e cinco"
   if (hour === -1) {
     const horaMatch = text.match(/(\d{1,2})\s*(?:hora|horas)/);
     if (horaMatch) {
@@ -84,7 +132,6 @@ function extractAlarmFromText(text: string): ParsedAlarm {
     }
   }
 
-  // Números por extenso
   if (hour === -1) {
     const extenso: Record<string, number> = {
       "uma": 1, "dois": 2, "duas": 2, "três": 3, "tres": 3,
@@ -104,14 +151,12 @@ function extractAlarmFromText(text: string): ParsedAlarm {
 
   if (hour === -1) return null;
 
-  // AM/PM
   if (text.includes("da tarde") || text.includes("da noite") || text.includes("pm")) {
     if (hour < 12) hour += 12;
   } else if (text.includes("da manhã") || text.includes("am")) {
     if (hour === 12) hour = 0;
   }
 
-  // Dias da semana
   const days: number[] = [];
   for (const [word, dayNum] of Object.entries(DAY_MAP)) {
     if (text.includes(word)) {
@@ -128,7 +173,6 @@ function extractAlarmFromText(text: string): ParsedAlarm {
     days.push(0, 6);
   }
 
-  // Label — só extrai se vier após "chamado" ou "com nome"
   let label = "";
   const labelMatch = text.match(/(?:chamado|com nome)\s+(.+?)(?:\s+(?:às|as|para|todo|segunda|terça|quarta|quinta|sexta|sábado|domingo|\d)|$)/);
   if (labelMatch && labelMatch[1].length > 2) {

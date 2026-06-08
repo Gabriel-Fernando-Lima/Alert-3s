@@ -8,17 +8,17 @@ type UseVoiceCommandOptions = {
   onSnooze?: () => void;
   onCreateAlarm?: (hour: number, minute: number, days: number[], label: string) => void;
   onNap?: (minutes: number) => void;
+  onReminder?: (hour: number, minute: number, label: string) => void;
   continuous?: boolean;
   onBeforeListen?: () => void;
   onAfterListen?: () => void;
-  prompt?: string; // ← adiciona isso
+  prompt?: string;
 };
 
 export function useVoiceCommand(options: UseVoiceCommandOptions = {}) {
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const continuousRef = useRef(false);
   const stoppedRef = useRef(false);
 
   const startListening = useCallback(async () => {
@@ -27,13 +27,12 @@ export function useVoiceCommand(options: UseVoiceCommandOptions = {}) {
       setTranscript("");
       setError(null);
       stoppedRef.current = false;
-
       await listenOnce();
     } catch (e: any) {
       setError(e.message);
       setListening(false);
     }
-  }, [options.onStop, options.onSnooze, options.onCreateAlarm, options.onNap, options.continuous]);
+  }, [options.onStop, options.onSnooze, options.onCreateAlarm, options.onNap, options.onReminder, options.continuous]);
 
   async function listenOnce() {
     try {
@@ -50,8 +49,8 @@ export function useVoiceCommand(options: UseVoiceCommandOptions = {}) {
           },
         }
       );
-      options.onAfterListen?.();
 
+      options.onAfterListen?.();
       if (stoppedRef.current) return;
 
       if (result.resultCode === -1 || result.resultCode === 1) {
@@ -62,23 +61,24 @@ export function useVoiceCommand(options: UseVoiceCommandOptions = {}) {
           setTranscript(text);
           const handled = handleCommand(text);
           if (!handled && options.continuous && !stoppedRef.current) {
-            setTimeout(() => listenOnce(), 3000); // ← aqui
+            setTimeout(() => listenOnce(), 3000);
           } else {
             setListening(false);
           }
         } else if (options.continuous && !stoppedRef.current) {
-          setTimeout(() => listenOnce(), 3000); // ← aqui
+          setTimeout(() => listenOnce(), 3000);
         } else {
           setListening(false);
         }
       } else if (options.continuous && !stoppedRef.current) {
-        setTimeout(() => listenOnce(), 3000); // ← aqui
+        setTimeout(() => listenOnce(), 3000);
       } else {
         setListening(false);
       }
     } catch (e: any) {
+      options.onAfterListen?.();
       if (options.continuous && !stoppedRef.current) {
-        setTimeout(() => listenOnce(), 3000); // ← aqui
+        setTimeout(() => listenOnce(), 3000);
       } else {
         setListening(false);
       }
@@ -89,6 +89,7 @@ export function useVoiceCommand(options: UseVoiceCommandOptions = {}) {
     const { voiceCommands } = useSettingsStore.getState();
     const lower = text.toLowerCase().trim();
 
+    // Comandos personalizados
     if (voiceCommands.stop.some((cmd) => lower.includes(cmd.toLowerCase()))) {
       stoppedRef.current = true;
       setListening(false);
@@ -111,6 +112,7 @@ export function useVoiceCommand(options: UseVoiceCommandOptions = {}) {
       }
     }
 
+    // NLP padrão
     const result = parseVoiceCommand(text);
     switch (result.type) {
       case "stop":
@@ -128,6 +130,14 @@ export function useVoiceCommand(options: UseVoiceCommandOptions = {}) {
         setListening(false);
         options.onNap?.(result.napMinutes ?? 20);
         return true;
+      case "reminder":
+        if (result.reminder) {
+          stoppedRef.current = true;
+          setListening(false);
+          options.onReminder?.(result.reminder.hour, result.reminder.minute, result.reminder.label);
+          return true;
+        }
+        return false;
       case "create":
         if (result.alarm) {
           options.onCreateAlarm?.(result.alarm.hour, result.alarm.minute, result.alarm.days, result.alarm.label);
