@@ -13,6 +13,7 @@ import { auth } from "@/src/services/firebase";
 import { useVoiceCommand } from "@/src/hooks/useVoiceCommand";
 import { useTheme } from "@/src/theme/useTheme";
 import * as Notifications from "expo-notifications";
+import { syncAlarms } from "@/src/services/backup";
 
 const DAYS = ["D", "S", "T", "Q", "Q", "S", "S"];
 
@@ -28,8 +29,6 @@ export default function AlarmsScreen() {
   }
 
   const { listening, startListening, stopListening } = useVoiceCommand({
-    prompt: "Diga o horário do alarme...",
-
     onCreateAlarm: async (hour, minute, days, label) => {
       const alarm: Alarm = {
         id: Date.now().toString(),
@@ -89,6 +88,9 @@ export default function AlarmsScreen() {
   useEffect(() => {
     initDB();
     load(uid);
+    syncAlarms()
+      .then(() => load(uid))
+      .catch((e) => console.warn("Sync falhou:", e));
   }, []);
 
   function nextOccurrence(hour: number, minute: number): Date {

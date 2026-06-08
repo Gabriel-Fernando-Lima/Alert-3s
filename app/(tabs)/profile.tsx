@@ -36,8 +36,21 @@ export default function ProfileScreen() {
 
   const {
     voiceCommands, snoozeMinutes, flashEnabled, gradualVolume, autoVoice,
+    shakeEnabled, challengeEnabled,
     load, setVoiceCommands, setSnoozeMinutes, setFlashEnabled, setGradualVolume, setAutoVoice,
+    setShakeEnabled, setChallengeEnabled, voiceLanguage, voiceStats,
+    setVoiceLanguage, resetVoiceStats,
   } = useSettingsStore();
+
+  const LANGUAGES = [
+    { code: "pt-BR" as const, label: "Português", flag: "🇧🇷" },
+    { code: "en-US" as const, label: "English", flag: "🇺🇸" },
+    { code: "es-ES" as const, label: "Español", flag: "🇪🇸" },
+  ];
+
+  const successRate = voiceStats.recognized + voiceStats.failed > 0
+    ? Math.round((voiceStats.recognized / (voiceStats.recognized + voiceStats.failed)) * 100)
+    : null;
 
   const [cmdStopList, setCmdStopList] = useState<string[]>(voiceCommands.stop);
   const [cmdSnoozeList, setCmdSnoozeList] = useState<string[]>(voiceCommands.snooze);
@@ -214,7 +227,10 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={{ paddingBottom: 120 }}
+    >
       <Text style={[styles.header, { color: colors.text, fontSize: fonts.xxl }]}>Perfil</Text>
 
       {/* Info da conta */}
@@ -372,6 +388,38 @@ export default function ProfileScreen() {
 
         <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
           <View style={styles.cardRowLeft}>
+            <Ionicons name="phone-portrait-outline" size={20} color={colors.textSecondary} />
+            <View>
+              <Text style={styles.cardValue}>Agitar para parar</Text>
+              <Text style={styles.cardLabel}>Balançar o celular desliga o alarme</Text>
+            </View>
+          </View>
+          <Switch
+            value={shakeEnabled}
+            onValueChange={setShakeEnabled}
+            trackColor={{ false: colors.card, true: colors.accent }}
+            thumbColor={colors.text}
+          />
+        </View>
+
+        <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
+          <View style={styles.cardRowLeft}>
+            <Ionicons name="checkmark-circle-outline" size={20} color={colors.textSecondary} />
+            <View>
+              <Text style={styles.cardValue}>Desafio para desligar</Text>
+              <Text style={styles.cardLabel}>Resolve uma conta antes de parar</Text>
+            </View>
+          </View>
+          <Switch
+            value={challengeEnabled}
+            onValueChange={setChallengeEnabled}
+            trackColor={{ false: colors.card, true: colors.accent }}
+            thumbColor={colors.text}
+          />
+        </View>
+
+        <View style={[styles.settingRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
+          <View style={styles.cardRowLeft}>
             <Ionicons name="time-outline" size={20} color={colors.textSecondary} />
             <View>
               <Text style={styles.cardValue}>Tempo de soneca</Text>
@@ -444,6 +492,79 @@ export default function ProfileScreen() {
             </Text>
           </TouchableOpacity>
         )}
+      </View>
+
+      {/* Idioma dos comandos de voz */}
+      <Text style={styles.sectionTitle}>Idioma de Voz</Text>
+      <View style={[styles.card, { flexDirection: "column", gap: 8, backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.cardRowLeft}>
+          <Ionicons name="language-outline" size={20} color={colors.textSecondary} />
+          <Text style={styles.cardValue}>Idioma para reconhecimento</Text>
+        </View>
+        <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+          {LANGUAGES.map((lang) => (
+            <TouchableOpacity
+              key={lang.code}
+              onPress={() => setVoiceLanguage(lang.code)}
+              style={[
+                styles.toggleBtn,
+                { flexDirection: "row", gap: 6, alignItems: "center" },
+                voiceLanguage === lang.code
+                  ? { backgroundColor: colors.accent }
+                  : { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+              ]}
+              accessibilityLabel={`Selecionar idioma ${lang.label}`}
+            >
+              <Text style={{ fontSize: 16 }}>{lang.flag}</Text>
+              <Text style={[styles.toggleBtnText, voiceLanguage !== lang.code && { color: colors.textSecondary }]}>
+                {lang.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* Estatísticas de voz */}
+      <Text style={styles.sectionTitle}>Estatísticas de Voz</Text>
+      <View style={[styles.card, { flexDirection: "column", gap: 12, backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+          <View style={{ alignItems: "center", flex: 1 }}>
+            <Text style={{ fontSize: 28, fontWeight: "bold", color: colors.accent }}>{voiceStats.recognized}</Text>
+            <Text style={styles.cardLabel}>Reconhecidos</Text>
+          </View>
+          <View style={{ width: 1, backgroundColor: colors.border }} />
+          <View style={{ alignItems: "center", flex: 1 }}>
+            <Text style={{ fontSize: 28, fontWeight: "bold", color: colors.danger }}>{voiceStats.failed}</Text>
+            <Text style={styles.cardLabel}>Falhos</Text>
+          </View>
+          <View style={{ width: 1, backgroundColor: colors.border }} />
+          <View style={{ alignItems: "center", flex: 1 }}>
+            <Text style={{ fontSize: 28, fontWeight: "bold", color: colors.text }}>
+              {successRate !== null ? `${successRate}%` : "—"}
+            </Text>
+            <Text style={styles.cardLabel}>Taxa de acerto</Text>
+          </View>
+        </View>
+
+        {successRate !== null && successRate < 70 && (
+          <View style={{ backgroundColor: colors.card, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: colors.border }}>
+            <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
+              💡 Taxa de acerto baixa. Tente falar mais devagar e próximo ao microfone, ou ajuste os comandos na seção acima.
+            </Text>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[styles.toggleBtn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, alignSelf: "flex-start" }]}
+          onPress={() => {
+            Alert.alert("Zerar estatísticas", "Deseja zerar o histórico de reconhecimento de voz?", [
+              { text: "Cancelar", style: "cancel" },
+              { text: "Zerar", style: "destructive", onPress: resetVoiceStats },
+            ]);
+          }}
+        >
+          <Text style={[styles.toggleBtnText, { color: colors.textSecondary }]}>Zerar estatísticas</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Acessibilidade */}

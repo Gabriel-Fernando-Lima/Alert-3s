@@ -28,6 +28,15 @@ type SettingsStore = {
   setEmergencyContact: (phone: string) => Promise<void>;
   incrementSnooze: () => number;
   resetSnooze: () => void;
+  shakeEnabled: boolean;
+  setShakeEnabled: (enabled: boolean) => Promise<void>;
+  voiceLanguage: "pt-BR" | "en-US" | "es-ES";
+  voiceStats: { recognized: number; failed: number };
+  setVoiceLanguage: (lang: "pt-BR" | "en-US" | "es-ES") => Promise<void>;
+  incrementVoiceStat: (type: "recognized" | "failed") => void;
+  resetVoiceStats: () => void;
+  challengeEnabled: boolean;
+  setChallengeEnabled: (enabled: boolean) => Promise<void>;
 };
 
 const DEFAULT_COMMANDS: VoiceCommandSet = {
@@ -37,16 +46,26 @@ const DEFAULT_COMMANDS: VoiceCommandSet = {
 };
 
 async function saveSettings(state: any) {
-  await AsyncStorage.setItem("@alert:settings", JSON.stringify({
-    voiceCommands: state.voiceCommands,
-    snoozeMinutes: state.snoozeMinutes,
-    flashEnabled: state.flashEnabled,
-    gradualVolume: state.gradualVolume,
-    autoVoice: state.autoVoice,
-    highContrast: state.highContrast,
-    largeFonts: state.largeFonts,
-    emergencyContact: state.emergencyContact,
-  }));
+  try {
+    const payload = {
+      voiceCommands: state.voiceCommands,
+      snoozeMinutes: state.snoozeMinutes,
+      flashEnabled: state.flashEnabled,
+      gradualVolume: state.gradualVolume,
+      autoVoice: state.autoVoice,
+      highContrast: state.highContrast,
+      largeFonts: state.largeFonts,
+      emergencyContact: state.emergencyContact,
+      shakeEnabled: state.shakeEnabled,
+      voiceLanguage: state.voiceLanguage,
+      voiceStats: state.voiceStats,
+      challengeEnabled: state.challengeEnabled,
+    };
+    console.log("[settingsStore.saveSettings] saving:", payload);
+    await AsyncStorage.setItem("@alert:settings", JSON.stringify(payload));
+  } catch (e) {
+    console.warn("[settingsStore.saveSettings] error saving settings:", e);
+  }
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
@@ -59,18 +78,24 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   largeFonts: false,
   emergencyContact: "",
   snoozeCount: 0,
+  shakeEnabled: true,
+  voiceLanguage: "pt-BR",
+  voiceStats: { recognized: 0, failed: 0 },
+  challengeEnabled: false,
 
   load: async () => {
     try {
       const raw = await AsyncStorage.getItem("@alert:settings");
       if (raw) {
         const saved = JSON.parse(raw);
+        console.log("[settingsStore.load] loaded from storage:", saved);
         if (saved.voiceCommands) {
           const vc = saved.voiceCommands;
           if (typeof vc.stop === "string") vc.stop = [vc.stop];
           if (typeof vc.snooze === "string") vc.snooze = [vc.snooze];
           if (typeof vc.create === "string") vc.create = [vc.create];
         }
+        if (saved.voiceStats) console.log("[settingsStore.load] saved.voiceStats:", saved.voiceStats);
         set({ ...saved, snoozeCount: 0 });
       }
     } catch (e) {
@@ -109,6 +134,39 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   setEmergencyContact: async (phone) => {
     set({ emergencyContact: phone });
     await saveSettings({ ...get(), emergencyContact: phone });
+  },
+  setShakeEnabled: async (enabled) => {
+    set({ shakeEnabled: enabled });
+    await saveSettings({ ...get(), shakeEnabled: enabled });
+  },
+  setVoiceLanguage: async (lang) => {
+    set({ voiceLanguage: lang });
+    await saveSettings({ ...get(), voiceLanguage: lang });
+  },
+  incrementVoiceStat: (type) => {
+    const stats = get().voiceStats;
+    const next = { ...stats, [type]: stats[type] + 1 };
+    console.log(`[settingsStore.incrementVoiceStat] ${type} from ${stats[type]} -> ${next[type]}`, { prev: stats, next });
+    set({ voiceStats: next });
+    // persist updated stats
+    try {
+      saveSettings({ ...get(), voiceStats: next });
+    } catch (e) {
+      console.warn("[settingsStore.incrementVoiceStat] failed to persist voiceStats:", e);
+    }
+  },
+  resetVoiceStats: () => {
+    const next = { recognized: 0, failed: 0 };
+    set({ voiceStats: next });
+    try {
+      saveSettings({ ...get(), voiceStats: next });
+    } catch (e) {
+      console.warn("[settingsStore.resetVoiceStats] failed to persist voiceStats:", e);
+    }
+  },
+  setChallengeEnabled: async (enabled) => {
+    set({ challengeEnabled: enabled });
+    await saveSettings({ ...get(), challengeEnabled: enabled });
   },
 
   incrementSnooze: () => {

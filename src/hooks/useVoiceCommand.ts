@@ -20,6 +20,7 @@ export function useVoiceCommand(options: UseVoiceCommandOptions = {}) {
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
   const stoppedRef = useRef(false);
+  const { voiceLanguage, voiceCommands, incrementVoiceStat } = useSettingsStore.getState();
 
   const startListening = useCallback(async () => {
     try {
@@ -43,12 +44,13 @@ export function useVoiceCommand(options: UseVoiceCommandOptions = {}) {
         {
           extra: {
             "android.speech.extra.LANGUAGE_MODEL": "free_form",
-            "android.speech.extra.LANGUAGE": "pt-BR",
+            "android.speech.extra.LANGUAGE": voiceLanguage,
             "android.speech.extra.PROMPT": options.prompt ?? "Diga o comando...",
             "android.speech.extra.MAX_RESULTS": 1,
           },
         }
       );
+
 
       options.onAfterListen?.();
       if (stoppedRef.current) return;
@@ -60,22 +62,35 @@ export function useVoiceCommand(options: UseVoiceCommandOptions = {}) {
         if (text) {
           setTranscript(text);
           const handled = handleCommand(text);
-          if (!handled && options.continuous && !stoppedRef.current) {
+          console.log("[useVoiceCommand] recognized text:", text, "handled:", handled, "lang:", voiceLanguage);
+          if (handled) {
+            incrementVoiceStat("recognized");
+            if (!options.continuous && !stoppedRef.current) setListening(false);
+          } else {
+            incrementVoiceStat("failed");
+            if (options.continuous && !stoppedRef.current) {
+              setTimeout(() => listenOnce(), 3000);
+            } else {
+              setListening(false);
+            }
+          }
+        } else {
+          // Nenhum texto reconhecido
+          incrementVoiceStat("failed");
+          if (options.continuous && !stoppedRef.current) {
             setTimeout(() => listenOnce(), 3000);
           } else {
             setListening(false);
           }
-        } else if (options.continuous && !stoppedRef.current) {
-          setTimeout(() => listenOnce(), 3000);
-        } else {
-          setListening(false);
         }
+        
       } else if (options.continuous && !stoppedRef.current) {
         setTimeout(() => listenOnce(), 3000);
       } else {
         setListening(false);
       }
     } catch (e: any) {
+      incrementVoiceStat("failed");
       options.onAfterListen?.();
       if (options.continuous && !stoppedRef.current) {
         setTimeout(() => listenOnce(), 3000);
@@ -105,15 +120,14 @@ export function useVoiceCommand(options: UseVoiceCommandOptions = {}) {
     }
 
     if (voiceCommands.create.some((cmd) => lower.includes(cmd.toLowerCase()))) {
-      const result = parseVoiceCommand(text);
+      const result = parseVoiceCommand(text, voiceLanguage);
       if (result.type === "create" && result.alarm) {
         options.onCreateAlarm?.(result.alarm.hour, result.alarm.minute, result.alarm.days, result.alarm.label);
         return true;
       }
     }
 
-    // NLP padrão
-    const result = parseVoiceCommand(text);
+    const result = parseVoiceCommand(text, voiceLanguage);
     switch (result.type) {
       case "stop":
         stoppedRef.current = true;

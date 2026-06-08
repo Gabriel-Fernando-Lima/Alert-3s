@@ -1,4 +1,4 @@
-import { collection, doc, setDoc, getDocs, deleteDoc } from "firebase/firestore";
+import { collection, doc, setDoc, getDocs } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { alarmRepository } from "../db/alarmRepository";
 import { Alarm } from "../store/alarmStore";
@@ -17,6 +17,7 @@ export async function backupToFirestore(): Promise<number> {
       ...alarm,
       days: JSON.stringify(alarm.days),
       backed_up_at: Date.now(),
+      updated_at: alarm.created_at, // usa created_at como referência de versão
     });
     count++;
   }
@@ -35,14 +36,12 @@ export async function restoreFromFirestore(): Promise<number> {
 
   if (snap.empty) return 0;
 
-  // Pega alarmes locais para evitar duplicatas
   const localAlarms = alarmRepository.getAll(uid);
-  const localIds = new Set(localAlarms.map((a) => a.id));
+  const localMap = new Map(localAlarms.map((a) => [a.id, a]));
 
   let count = 0;
   for (const docSnap of snap.docs) {
     const data = docSnap.data();
-    if (localIds.has(data.id)) continue; // já existe localmente
 
     const alarm: Alarm = {
       id: data.id,
@@ -56,12 +55,28 @@ export async function restoreFromFirestore(): Promise<number> {
       created_at: data.created_at,
     };
 
-    alarmRepository.insert(alarm);
-    count++;
+    const local = localMap.get(alarm.id);
+
+    if (!local) {
+      // Não existe localmente — insere
+      alarmRepository.insert(alarm);
+      count++;
+    } else if ((data.updated_at ?? 0) > local.created_at) {
+      // Firestore tem versão mais recente — substitui
+      alarmRepository.update(alarm);
+      count++;
+    }
+    // Se local é mais recente ou igual, mantém o local
   }
 
-  console.log(`☁️ Restauração: ${count} alarmes restaurados`);
+  console.log(`☁️ Restauração: ${count} alarmes sincronizados`);
   return count;
+}
+
+export async function syncAlarms(): Promise<void> {
+  // Faz backup e restore em sequência para sincronização bidirecional
+  await backupToFirestore();
+  await restoreFromFirestore();
 }
 
 export async function getLastBackupDate(): Promise<number | null> {
